@@ -1,0 +1,17 @@
+# Large flasher binaries (~102 MB each) — exceed GitHub's 100 MB/file limit and
+# bloat history. They stay on disk in this folder but are NOT tracked by git.
+#   - 9802810007       : original NVIDIA bundle (input)
+#   - nvflash_unlocked : reproducible at any time with:  ./nv_unlock.py 9802810007
+#   - nvflash_eng      : byte-identical copy of nvflash_unlocked
+/9802810007
+/nvflash_unlocked
+/nvflash_eng
+*_unlocked
+
+# Python / runtime scratch
+__pycache__/
+*.pyc
+
+# Runtime logs produced by running the flasher
+nvidia_update_error.log
+*.log

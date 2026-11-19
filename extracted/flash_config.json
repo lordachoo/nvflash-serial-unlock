@@ -1,0 +1,21 @@
+{
+    "version": 1,
+    "restricted_mode": "sn_based",
+    "silence": false,
+    "no_confirm": true,
+    "upgrade_only": false,
+    "no_downgrade": false,
+    "reboot": false,
+    "reset_after_update": false,
+    "nvpn": "",
+    "forcesub": false,
+    "forced_ssvid": "0xFFFF",
+    "forced_ssid": "0xFFFF",
+    "override_sub": false,
+    "force_board": false,
+    "forced_board_id": "0xFFFF",
+    "sn_list": [
+        "1791625022632"
+    ],
+    "pdi_list": []
+}

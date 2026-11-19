@@ -1,0 +1,63 @@
+SERIAL-LOCK UNLOCK — patch proof
+================================
+Patched function : FUN_0056b872  (UpdaterConfig allow-list dispatcher)
+File offset      : 0x16b872   (vaddr 0x56b872)
+Original 6 bytes : 41 56 41 55 41 54            (push r14; push r13; push r12)
+Patched  6 bytes : b8 01 00 00 00 c3            (mov eax,1 ; ret)  -> always "allowed"
+
+Why it is sufficient & safe:
+- FUN_0056b872 is the ONLY caller of both allow-list matchers:
+    FUN_0056a7f8  (sn_based  -> std::find over sn_list)
+    FUN_0056a1a2  (pdi_based -> std::find over pdi_list)
+- Consumer gate (the "skipping" decision) at vaddr 0x555d7e:
+    call *rax                 ; -> FUN_0056b872 (via vtable)
+    mov  al -> allowed
+    cmpb allowed,0
+    jne  flash_path           ; nonzero => FLASH
+    (else) load 0xd45e78 "Device not in JSON config allow-list, skipping."
+  Forcing return=1 makes `jne flash_path` always taken.
+
+NOT touched (model / brick protection stays active):
+- Board-ID / "Board data is mismatch..." check  (string @ vaddr 0xd56588, separate fn)
+- ERoT / firmware signature verification (on-GPU root of trust)
+- Anti-rollback checks
+
+Original binary sha256 : 12978284cb4fe6ceaaf05519e16af0875f1047008abf9612dd2fd29b0084a51c
+Unlocked binary sha256 : f4ecbef3acb9ee97cdb68d626737d11a69ff8e258914de336d4105f66d7d158d
+
+================================================================
+PATCH #2 — dispatcher "Unknown command" gate (CLI enabler)
+================================================================
+Problem found: the shipped bundle is the nvflash_eng engine behind a
+restricted "nvuflash" FIELD-UPDATE front-end. Its CLI dispatcher
+(FUN_0092406e) routes:
+    help        -> usage
+    licenseinfo -> license text
+    dump        -> show embedded PLDM package info
+    version     -> show adapter firmware versions
+    <any other RECOGNIZED invocation> -> *** UPDATE embedded firmware ***
+The update is the DEFAULT action. But the dispatcher first calls
+param_1[1]->vtable[0x18]() ; if it returns nonzero it prints
+"Unknown command" + usage and exits (return 5). That method is a plain
+getter:
+    FUN_0057c719:  movzbl 0x60(%rdi),%eax ; ret   (returns parser byte 0x60)
+Byte 0x60 is the parser's "unrecognized / no primary command" flag, which
+is set for a bare run and for any token not in the (runtime-built) command
+table — so the embedded UPDATE path was unreachable from a plain CLI call.
+(That is why bare run and --autoupdate both printed "Unknown command".)
+
+Patch: force the getter to always return 0 ("recognized").
+File offset : 0x17c719   (vaddr 0x57c719)
+Original 5b : 0f b6 47 60 c3   (movzbl 0x60(rdi),eax ; ret)
+Patched  5b : 31 c0 66 90 c3   (xor eax,eax ; nop ; ret)  -> always 0
+
+Effect: --help/--dump/--version/--licenseinfo still work (checked first);
+every other invocation (including a bare `sudo ./nvflash_unlocked`) now
+falls through to the DEFAULT embedded-firmware UPDATE path.
+
+NOT touched (brick protection stays active): Board-ID/model match, ERoT
+signature verification, anti-rollback. Status: derived from static
+analysis (Ghidra/objdump); not runtime-tested on hardware.
+
+Final binary sha256 (serial + dispatcher patch):
+  912f0d74c962d55fa0c30e41e2711c9332562b3bd3f03bdf9ed2cdf700d04d3c
